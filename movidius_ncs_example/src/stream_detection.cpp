@@ -106,6 +106,8 @@ private:
     cv::imshow("image_viewer", cvImage);
     cv::waitKey(5);
   }
+
+  RCLCPP_INFO(node->get_logger(), "inference time: %fms", objs->inference_time_ms 
 };
 
 int main(int argc, char ** argv)
