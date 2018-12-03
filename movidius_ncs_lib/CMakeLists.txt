@@ -20,8 +20,8 @@ find_package(rclcpp REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(object_msgs REQUIRED)
-find_package(rviz_yaml_cpp_vendor REQUIRED)
 find_package(cv_bridge REQUIRED)
+find_package(yaml_cpp_vendor REQUIRED)
 
 find_path(MVNC_HEADER_FILE
           mvnc.h
@@ -32,7 +32,7 @@ if(NOT MVNC_HEADER_FILE)
 endif()
 
 include_directories(include
-  ${rviz_yaml_cpp_vendor_DIR}/../../../opt/rviz_yaml_cpp_vendor/include)
+  ${yaml_cpp_vendor_DIR}/../../../opt/yaml_cpp_vendor/include)
 
 add_library(${PROJECT_NAME} SHARED
   src/ncs.cpp
@@ -48,11 +48,11 @@ target_link_libraries(${PROJECT_NAME}
   mvnc)
 
 ament_target_dependencies(${PROJECT_NAME}
-  "rviz_yaml_cpp_vendor"
-  "OpenCV"
   "object_msgs"
   "cv_bridge")
-
+  "yaml_cpp_vendor"
+  "OpenCV")
+  
 ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME})
 

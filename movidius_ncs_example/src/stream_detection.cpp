@@ -41,6 +41,7 @@ public:
         "/movidius_ncs_stream/detected_objects"));
     sync_sub_ = std::unique_ptr<approximateSync>(new approximateSync(
           approximatePolicy(100), *cam_sub_, *obj_sub_));
+
     sync_sub_->registerCallback(&DetectionShow::showImage, this);
   }
 
