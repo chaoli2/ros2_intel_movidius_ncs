@@ -15,6 +15,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <object_msgs/msg/objects_in_boxes.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -32,21 +33,28 @@ public:
   DetectionShow()
   : Node("detection_show")
   {
-    rclcpp::Node::SharedPtr node = std::shared_ptr<rclcpp::Node>(this); 
-    cam_sub_ = std::make_unique<camSub>(node, "/camera/color/image_raw");
-    obj_sub_ = std::make_unique<objSub>(node, "/movidius_ncs_stream/detected_objects");
-    sync_sub_ = std::make_unique<sync>(*cam_sub_, *obj_sub_, 10);
+    rclcpp::Node::SharedPtr node = std::shared_ptr<rclcpp::Node>(this);
+    cam_sub_ = std::unique_ptr<camSub>(new camSub(node,
+        "/camera/color/image_raw"));
+    obj_sub_ =
+      std::unique_ptr<objSub>(new objSub(node,
+        "/movidius_ncs_stream/detected_objects"));
+    sync_sub_ = std::unique_ptr<approximateSync>(new approximateSync(
+          approximatePolicy(100), *cam_sub_, *obj_sub_));
+
     sync_sub_->registerCallback(&DetectionShow::showImage, this);
   }
 
 private:
   using camSub = message_filters::Subscriber<sensor_msgs::msg::Image>;
   using objSub = message_filters::Subscriber<object_msgs::msg::ObjectsInBoxes>;
-  using sync =
-    message_filters::TimeSynchronizer<sensor_msgs::msg::Image, object_msgs::msg::ObjectsInBoxes>;
+  using approximatePolicy = message_filters::sync_policies::ApproximateTime
+    <sensor_msgs::msg::Image, object_msgs::msg::ObjectsInBoxes>;
+  using approximateSync = message_filters::Synchronizer<approximatePolicy>;
+
   std::unique_ptr<camSub> cam_sub_;
   std::unique_ptr<objSub> obj_sub_;
-  std::unique_ptr<sync> sync_sub_;
+  std::unique_ptr<approximateSync> sync_sub_;
 
   int getFPS()
   {
@@ -57,7 +65,8 @@ private:
 
     frame_cnt++;
 
-    boost::posix_time::ptime current = boost::posix_time::microsec_clock::local_time();
+    boost::posix_time::ptime current =
+      boost::posix_time::microsec_clock::local_time();
     boost::posix_time::time_duration msdiff = current - duration_start;
 
     if (msdiff.total_milliseconds() > 1000) {
@@ -79,7 +88,8 @@ private:
 
     for (auto obj : objs->objects_vector) {
       std::stringstream ss;
-      ss << obj.object.object_name << ": " << obj.object.probability * 100 << '%';
+      ss << obj.object.object_name << ": " << obj.object.probability * 100 <<
+        '%';
 
       int xmin = obj.roi.x_offset;
       int ymin = obj.roi.y_offset;
@@ -91,17 +101,18 @@ private:
 
       cv::Point left_top = cv::Point(xmin, ymin);
       cv::Point right_bottom = cv::Point(xmax, ymax);
-      cv::rectangle(cvImage, left_top, right_bottom, cv::Scalar(0, 255, 0), 1, 8, 0);
-      cv::rectangle(cvImage, cvPoint(xmin, ymin), cvPoint(xmax, ymin + 20), cv::Scalar(0, 255, 0),
-        -1);
-      cv::putText(cvImage, ss.str(), cvPoint(xmin + 5, ymin + 20), cv::FONT_HERSHEY_PLAIN, 1,
-        cv::Scalar(0, 0, 255), 1);
+      cv::rectangle(cvImage, left_top, right_bottom, cv::Scalar(0, 255, 0), 1,
+        8, 0);
+      cv::rectangle(cvImage, cvPoint(xmin, ymin), cvPoint(xmax, ymin + 20),
+        cv::Scalar(0, 255, 0), -1);
+      cv::putText(cvImage, ss.str(), cvPoint(xmin + 5, ymin + 20),
+        cv::FONT_HERSHEY_PLAIN, 1, cv::Scalar(0, 0, 255), 1);
     }
     std::stringstream ss;
     int fps = getFPS();
     ss << "FPS: " << fps;
-    cv::putText(cvImage, ss.str(), cvPoint(LINESPACING, LINESPACING), cv::FONT_HERSHEY_PLAIN, 1,
-      cv::Scalar(0, 255, 0));
+    cv::putText(cvImage, ss.str(), cvPoint(LINESPACING, LINESPACING),
+      cv::FONT_HERSHEY_PLAIN, 1, cv::Scalar(0, 255, 0));
 
     cv::imshow("image_viewer", cvImage);
     cv::waitKey(5);

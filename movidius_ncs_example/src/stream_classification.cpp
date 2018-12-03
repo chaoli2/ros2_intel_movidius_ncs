@@ -15,6 +15,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <object_msgs/msg/objects.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -32,21 +33,28 @@ public:
   ClassificationShow()
   : Node("classification_show")
   {
-    rclcpp::Node::SharedPtr node = std::shared_ptr<rclcpp::Node>(this); 
-    cam_sub_ = std::make_unique<camSub>(node, "/camera/color/image_raw");
-    obj_sub_ = std::make_unique<objSub>(node, "/movidius_ncs_stream/classified_objects");
-    sync_sub_ = std::make_unique<sync>(*cam_sub_, *obj_sub_, 10);
+
+    rclcpp::Node::SharedPtr node = std::shared_ptr<rclcpp::Node>(this);
+    cam_sub_ = std::unique_ptr<camSub>(new camSub(node,
+        "/camera/color/image_raw"));
+    obj_sub_ = std::unique_ptr<objSub>(new objSub(node,
+        "/movidius_ncs_stream/classified_objects"));
+    sync_sub_ = std::unique_ptr<approximateSync>(new approximateSync(
+          approximatePolicy(100), *cam_sub_, *obj_sub_));
+
     sync_sub_->registerCallback(&ClassificationShow::showImage, this);
   }
 
 private:
   using camSub = message_filters::Subscriber<sensor_msgs::msg::Image>;
   using objSub = message_filters::Subscriber<object_msgs::msg::Objects>;
-  using sync =
-    message_filters::TimeSynchronizer<sensor_msgs::msg::Image, object_msgs::msg::Objects>;
+  using approximatePolicy = message_filters::sync_policies::ApproximateTime
+    <sensor_msgs::msg::Image, object_msgs::msg::Objects>;
+  using approximateSync = message_filters::Synchronizer<approximatePolicy>;
+
   std::unique_ptr<camSub> cam_sub_;
   std::unique_ptr<objSub> obj_sub_;
-  std::unique_ptr<sync> sync_sub_;
+  std::unique_ptr<approximateSync> sync_sub_;
 
   int getFPS()
   {
@@ -57,7 +65,8 @@ private:
 
     frame_cnt++;
 
-    boost::posix_time::ptime current = boost::posix_time::microsec_clock::local_time();
+    boost::posix_time::ptime current =
+      boost::posix_time::microsec_clock::local_time();
     boost::posix_time::time_duration msdiff = current - duration_start;
 
     if (msdiff.total_milliseconds() > 1000) {
@@ -79,7 +88,8 @@ private:
     for (auto obj : objs->objects_vector) {
       std::stringstream ss;
       ss << obj.object_name << ": " << obj.probability * 100 << '%';
-      cv::putText(cvImage, ss.str(), cvPoint(LINESPACING, LINESPACING * (++cnt)),
+      cv::putText(cvImage, ss.str(),
+        cvPoint(LINESPACING, LINESPACING * (++cnt)),
         cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0));
     }
 
